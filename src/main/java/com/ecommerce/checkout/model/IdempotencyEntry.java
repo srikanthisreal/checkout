@@ -13,7 +13,7 @@ import java.time.Instant;
 @Document("idempotency")
 public class IdempotencyEntry {
     @Id public String key;                          // the Idempotency-Key header
-    @Indexed(expireAfterSeconds = 86400)
+    @Indexed(expireAfter = "24h")
     public Instant createdAt;
 
     public String ownerKey;                         // "user:..." or "anon:..."

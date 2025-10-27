@@ -2,4 +2,44 @@ spring:
   application:
     name: checkout
 app:
-  storage: mongo   # change to "inmem" for demo
+  storage: inmem   # change to "inmem" for demo
+#  storage: mongo   # change to "mongo" for demo
+server:
+  port: 9090
+
+springdoc:
+  # OpenAPI Documentation endpoint
+  api-docs:
+    path: /api-docs
+    enabled: true
+
+  # Swagger UI Configuration
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    # UI Customization
+    tags-sorter: alpha              # Sort tags alphabetically
+    operations-sorter: alpha        # Sort operations alphabetically
+    doc-expansion: none             # Don't expand all operations by default
+    display-request-duration: true  # Show API response times
+    filter: true                    # Enable search filter
+    persist-authorization: true     # Remember authorization
+    default-models-expand-depth: 2  # Expand model schemas to depth 2
+
+  # Show Spring Boot Actuator endpoints
+  show-actuator: true
+
+  # Additional settings
+  cache:
+    disabled: true                  # Disable caching for development
+  default-consumes-media-type: application/json
+  default-produces-media-type: application/json
+
+  # Custom info (can also be set in Java config)
+  info:
+    title: E-Commerce Checkout API
+    description: Complete API for shopping cart and checkout operations
+    version: 1.0.0
+    contact:
+      name: Development Team
+      email: dev@ecommerce.com
