@@ -2,12 +2,15 @@ package com.ecommerce.checkout.service.impl;
 
 import com.ecommerce.checkout.dto.AddToCartRequestDto;
 import com.ecommerce.checkout.dto.CartSnapshotDto;
-import com.ecommerce.checkout.util.CartMapper;
+import com.ecommerce.checkout.exception.IdempotencyConflictException;
+import com.ecommerce.checkout.exception.VersionMismatchException;
 import com.ecommerce.checkout.model.CartDocument;
 import com.ecommerce.checkout.model.IdempotencyEntry;
-import com.ecommerce.checkout.repository.CartRepository;
-import com.ecommerce.checkout.repository.IdempotencyRepository;
+import com.ecommerce.checkout.repo.CartRepository;
+import com.ecommerce.checkout.repo.IdempotencyRepository;
 import com.ecommerce.checkout.service.CartService;
+import com.ecommerce.checkout.util.CartMapper;
+import com.ecommerce.checkout.util.HashUtil;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;

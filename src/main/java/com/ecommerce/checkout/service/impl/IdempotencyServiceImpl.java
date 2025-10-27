@@ -1,7 +1,7 @@
 package com.ecommerce.checkout.service.impl;
 
 import com.ecommerce.checkout.model.IdempotencyEntry;
-import com.ecommerce.checkout.repository.IdempotencyRepository;
+import com.ecommerce.checkout.repo.IdempotencyRepository;
 import com.ecommerce.checkout.service.IdempotencyService;
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;

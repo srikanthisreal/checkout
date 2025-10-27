@@ -1,4 +1,4 @@
-package com.ecommerce.checkout.repository;
+package com.ecommerce.checkout.repo;
 
 import com.ecommerce.checkout.model.IdempotencyEntry;
 import org.springframework.data.mongodb.repository.MongoRepository;
