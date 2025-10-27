@@ -1,6 +1,5 @@
 package com.ecommerce.checkout.service.impl;
 
-
 import com.ecommerce.checkout.dto.AddToCartRequestDto;
 import com.ecommerce.checkout.dto.CartSnapshotDto;
 import com.ecommerce.checkout.util.CartMapper;
@@ -38,22 +37,54 @@ public class CartServiceImpl implements CartService {
                                    String currency, AddToCartRequestDto req,
                                    String idempotencyKey) {
 
-        // Idempotency (best-effort; for demo we only check presence)
+        // --- Normalize request and compute hash ---
+        // Use only fields that define the operation (don’t include clientCartVersion)
+        var canonical = new StringBuilder()
+                .append("sku=").append(Objects.toString(req.sku(),""))
+                .append("|pid=").append(Objects.toString(req.productId(),""))
+                .append("|qty=").append(req.quantity())
+                .append("|attrs=").append(new java.util.TreeMap<>(Optional.ofNullable(req.variantAttributes()).orElse(Map.of())))
+                .append("|seller=").append(Objects.toString(req.marketplaceSellerId(),""))
+                .append("|offer=").append(Objects.toString(req.offerId(),""))
+                .append("|backorder=").append(Objects.toString(req.acceptBackorder(), ""))
+                .toString();
+        var requestHash = HashUtil.sha256(canonical);
+
+        // --- Idempotency check / replay ---
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            if (idems.findById(idempotencyKey).isPresent()) {
-                // return current snapshot for owner
+            var existing = idems.findById(idempotencyKey);
+            if (existing.isPresent()) {
+                var entry = existing.get();
+
+                // 1) Key reused with a different body? -> 409
+                if (entry.requestHash != null && !entry.requestHash.equals(requestHash)) {
+                    throw new IdempotencyConflictException(
+                            "Idempotency-Key reused with a different request body");
+                }
+
+                // 2) If you cached a previous response, replay it (optional)
+                if (entry.responseCache != null && !entry.responseCache.isBlank()) {
+                    try {
+                        return new com.fasterxml.jackson.databind.ObjectMapper()
+                                .readValue(entry.responseCache, CartSnapshotDto.class);
+                    } catch (Exception ignore) {
+                        // fall back to return current state
+                    }
+                }
+
+                // 3) Fallback: return current snapshot (idempotent effect)
                 return CartMapper.toDto(loadOrCreate(ownerKey, currency, country));
             }
         }
 
+        // --- Proceed with normal add logic (unchanged) ---
         var cart = loadOrCreate(ownerKey, currency, country);
 
-        // optimistic concurrency (if client provided a version)
         if (req.clientCartVersion() != null && !req.clientCartVersion().equals(cart.version)) {
-            throw conflict("Cart version mismatch; please refresh", cart.id, cart.version);
+            throw new VersionMismatchException("Cart version mismatch; please refresh",
+                    cart.id, cart.version);
         }
 
-        // find or add line
         var line = findLine(cart, req.sku(), req.productId(), req.variantAttributes());
         if (line == null) {
             line = new CartDocument.Line();
@@ -68,27 +99,28 @@ public class CartServiceImpl implements CartService {
             cart.lines = cart.lines == null ? new ArrayList<>() : cart.lines;
             cart.lines.add(line);
         } else {
-            line.qty = Math.min(999, line.qty + Math.max(1, req.quantity())); // cap
+            line.qty = Math.min(999, line.qty + Math.max(1, req.quantity()));
         }
 
-        // recompute price & availability (stubs you’ll replace with real services)
         reprice(cart);
-        availability(cart, req.acceptBackorder() != null && req.acceptBackorder());
+        availability(cart, Boolean.TRUE.equals(req.acceptBackorder()));
 
-        // bump version & timestamps
-        cart.version = (cart.version == null ? 0 : cart.version) + 1;
-        cart.updatedAt = Instant.now();
+        bump(cart);
         carts.save(cart);
 
-        // persist idempotency key after success
+        var dto = CartMapper.toDto(cart);
+
+        // --- Persist idempotency entry (with request hash + cached response) ---
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            var entry = new IdempotencyEntry();
-            entry.key = idempotencyKey;
-            entry.createdAtEpoch = Instant.now().getEpochSecond();
+            String responseJson = null;
+            try { responseJson = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(dto); }
+            catch (Exception ignore) {}
+            var entry = new IdempotencyEntry(idempotencyKey, ownerKey, requestHash);
+            entry.responseCache = responseJson;
             idems.save(entry);
         }
 
-        return CartMapper.toDto(cart);
+        return dto;
     }
 
     @Override
@@ -295,7 +327,7 @@ public class CartServiceImpl implements CartService {
     }
 
     private void repriceTotals(CartDocument cart) {
-        cart.taxCents = Math.round(nz(cart.subtotalCents + nz(cart.promoDiscountCents)) * 0.19); // fake 19% VAT
+        cart.taxCents = Math.round(nz(cart.subtotalCents + nz(cart.promoDiscountCents)) * 0.19); // example vat added - 19% VAT
         cart.totalCents = nz(cart.subtotalCents) + nz(cart.promoDiscountCents) + nz(cart.taxCents);
     }
 

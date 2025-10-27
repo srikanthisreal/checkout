@@ -12,21 +12,16 @@ import java.time.Instant;
  */
 @Document("idempotency")
 public class IdempotencyEntry {
+    @Id public String key;                          // the Idempotency-Key header
+    @Indexed(expireAfterSeconds = 86400)
+    public Instant createdAt;
 
-    @Id
-    public String key;  // e.g. UUID passed in header: Idempotency-Key
-
-    @Indexed(expireAfterSeconds = 86400)// 24h TTL auto-expire
-    public Instant createdAt;            // time of first occurrence
-
-    public String ownerKey;              // user:xxx or anon:xxx (for context)
-    public String requestHash;           // optional: hash of payload for stricter match
-    public String responseCache;         // optional: cached serialized response
-
-    public Long createdAtEpoch;          // optional (epoch seconds)
+    public String ownerKey;                         // "user:..." or "anon:..."
+    public String requestHash;                      // SHA-256 of normalized body
+    public String responseCache;                    // JSON of the response (optional)
+    public Long createdAtEpoch;
 
     public IdempotencyEntry() {}
-
     public IdempotencyEntry(String key, String ownerKey, String requestHash) {
         this.key = key;
         this.ownerKey = ownerKey;
