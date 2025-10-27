@@ -43,3 +43,35 @@ springdoc:
     contact:
       name: Development Team
       email: dev@ecommerce.com
+
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,env,beans,loggers,threaddump,heapdump,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+    metrics:
+      enabled: true
+    prometheus:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+    tags:
+      application: checkout-service
+      environment: development
+
+# Logging for observability
+logging:
+  level:
+    com.ecommerce.checkout: DEBUG
+    org.springframework.web: INFO
