@@ -2,7 +2,7 @@
 # 🛍️ E-Commerce Checkout Cart Service
 
 A **robust, scalable shopping cart microservice** built with **Spring Boot** that supports **idempotent operations**, **multi-tenant handling**, and **pluggable storage** (MongoDB or in-memory).  
-Ideal for modern e-commerce platforms and payment systems (e.g. Redcare-style).
+Ideal for modern e-commerce platforms and payment systems (e.g. Production-style).
 
 ---
 
