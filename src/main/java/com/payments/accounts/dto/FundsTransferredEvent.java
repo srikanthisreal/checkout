@@ -1,9 +1,4 @@
-package com.payments.accounts;
-
-import org.springframework.context.ApplicationEvent;
-
-import java.math.BigDecimal;
-import java.time.Instant;
+package com.payments.accounts.dto;
 
 import java.math.BigDecimal;
 import java.time.Instant;

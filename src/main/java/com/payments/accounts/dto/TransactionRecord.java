@@ -1,9 +1,9 @@
-package com.payments.accounts;
+package com.payments.accounts.dto;
 
 import java.math.BigDecimal;
 
 import jakarta.persistence.*;
-import java.math.BigDecimal;
+
 import java.time.Instant;
 
 @Entity

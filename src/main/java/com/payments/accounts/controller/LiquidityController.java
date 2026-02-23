@@ -1,78 +1,57 @@
 package com.payments.accounts.controller;
 
-import com.ecommerce.checkout.service.IdempotencyService;
 import com.payments.accounts.EnterpriseTransferRequest;
+import com.payments.accounts.Idempotent;
 import com.payments.accounts.service.LiquidityTransferService;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
+import io.micrometer.core.annotation.Timed;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.validation.Valid;
-import org.slf4j.MDC;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.net.URI;
-import java.util.Optional;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/liquidity")
 public class LiquidityController {
 
     private final LiquidityTransferService transferService;
-    private final IdempotencyService idempotencyService;
+    private final MeterRegistry meterRegistry; // For custom business metrics
 
-    public LiquidityController(
-            LiquidityTransferService transferService,
-            IdempotencyService idempotencyService) {
+    public LiquidityController(LiquidityTransferService transferService, MeterRegistry meterRegistry) {
         this.transferService = transferService;
-        this.idempotencyService = idempotencyService;
+        this.meterRegistry = meterRegistry;
     }
 
+    @Idempotent(ttlSeconds = 86400) // 24-hour cache
+    @RateLimiter(name = "liquidityApi", fallbackMethod = "rateLimitFallback") // Prevents DDoS
+    @Timed(value = "api.liquidity.transfer.time", description = "Time taken to process transfer") // APM tracking
     @PostMapping("/transfers")
     public ResponseEntity<ApiResponse<TransferResult>> initiateTransfer(
-            @RequestHeader(value = "Idempotency-Key") String idempotencyKey,
-            @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId,
             @Valid @RequestBody EnterpriseTransferRequest request) {
 
-        // 1. Distributed Tracing (MDC)
-        // This ensures every log line written by this thread includes the Correlation ID,
-        // allowing us to trace this exact request across Kafka, DB, and other microservices.
-        String traceId = correlationId != null ? correlationId : UUID.randomUUID().toString();
-        MDC.put("correlationId", traceId);
+        // The Controller now strictly focuses on orchestrating the happy path.
+        TransferResult result = transferService.transferFunds(request);
 
-        try {
-            // 2. The Real Idempotency Check (Backed by Redis)
-            // If the client retried a request that already succeeded, return the cached result
-            // with a 200 OK (not a 201 Created, because we didn't create a new transaction).
-            Optional<TransferResult> cachedResult = idempotencyService.get(idempotencyKey);
-            if (cachedResult.isPresent()) {
-                return ResponseEntity.ok(ApiResponse.success(
-                        cachedResult.get(),
-                        "Recovered from Idempotency Cache",
-                        traceId
-                ));
-            }
+        // Custom Business Metric (Creates a Grafana dashboard spike for successful transfers)
+        meterRegistry.counter("business.transfers.success", "currency", request.currencyCode()).increment();
 
-            // 3. Execute the Business Logic (Orchestration)
-            // Note: Service is updated to return the Transaction ID so we can build a URI.
-            TransferResult result = transferService.transferFunds(request);
+        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
+                .path("/{id}")
+                .buildAndExpand(result.transactionId())
+                .toUri();
 
-            // 4. Save the successful result to Redis for future identical requests (e.g., valid for 24h)
-            idempotencyService.save(idempotencyKey, result);
+        // Let the Filter handle traceId extraction!
+        return ResponseEntity.created(location)
+                .body(ApiResponse.success(result, "Transfer processed successfully", null));
+    }
 
-            // 5. Strict HTTP Semantics (Location Header)
-            // REST standards mandate that a POST creating a resource returns the URI of that new resource.
-            URI location = ServletUriComponentsBuilder.fromCurrentRequest()
-                    .path("/{id}")
-                    .buildAndExpand(result.transactionId())
-                    .toUri();
-
-            // Return 201 CREATED (not 200 OK)
-            return ResponseEntity.created(location)
-                    .body(ApiResponse.success(result, "Transfer processed successfully", traceId));
-
-        } finally {
-            // ALWAYS clean up the thread-local MDC to prevent memory leaks in the thread pool!
-            MDC.remove("correlationId");
-        }
+    // Resilience4j Fallback method if the client exceeds their allowed requests per second
+    public ResponseEntity<ApiResponse<Void>> rateLimitFallback(EnterpriseTransferRequest request, Throwable t) {
+        return ResponseEntity.status(429).body(
+                new ApiResponse<>("ERROR", "Too many transfer requests. Please slow down.", null, null, null)
+        );
     }
 }

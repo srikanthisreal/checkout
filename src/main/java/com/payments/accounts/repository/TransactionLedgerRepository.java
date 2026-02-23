@@ -1,5 +1,6 @@
-package com.payments.accounts;
+package com.payments.accounts.repository;
 
+import com.payments.accounts.dto.TransactionRecord;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 import java.util.List;

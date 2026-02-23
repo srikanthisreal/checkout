@@ -1,4 +1,4 @@
-package com.payments.accounts.dto;
+package com.payments.accounts.domain;
 
 import java.math.BigDecimal;
 
@@ -15,6 +15,8 @@ public class Account {
 
     @Id
     private Long id;
+
+    private static final int SCALE = 4;
 
     // Financial systems ALWAYS explicitly define precision and scale in the DB mapping.
     // 19 digits total, 4 after the decimal (standard for handling fractional pennies in liquidity).
@@ -33,17 +35,19 @@ public class Account {
     // 2. The Domain explicitly protects its own state.
     public void debit(BigDecimal amount) {
         validateTransactionAmount(amount);
+        BigDecimal normalizeAmount = normalize(amount);
 
-        if (this.balance.compareTo(amount) < 0) {
+        if (this.balance.compareTo(normalizeAmount) < 0) {
             throw new InsufficientFundsException("Account ID: " + this.id + " has insufficient funds for debit.");
         }
-        this.balance = this.balance.subtract(amount);
+        this.balance = this.balance.subtract(normalizeAmount);
     }
 
     public void credit(BigDecimal amount) {
         validateTransactionAmount(amount);
+        BigDecimal normalizeAmount = normalize(amount);
 
-        this.balance = this.balance.add(amount);
+        this.balance = this.balance.add(normalizeAmount);
     }
 
     // 3. Centralized, reusable validation
@@ -55,6 +59,10 @@ public class Account {
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Transaction amount must be strictly positive. Value rejected: " + amount);
         }
+    }
+
+    private BigDecimal normalize(BigDecimal v) {
+        return v.setScale(SCALE, java.math.RoundingMode.UNNECESSARY);
     }
 
     // Getters omitted for brevity...
